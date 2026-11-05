@@ -280,17 +280,22 @@ class OllamaWorker(QThread):
 
 
 class PetSettingsDialog(QDialog):
-    """Small preferences dialog for fox movement."""
+    """Preferences for the pet's name and movement."""
 
     def __init__(
         self,
         wandering_enabled: bool,
         walk_speed: int,
+        pet_name: str = "Fox",
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Fox Settings")
+        self.setWindowTitle(f"{pet_name} Settings")
         self.setMinimumWidth(300)
+
+        self.name_input = QLineEdit(pet_name)
+        self.name_input.setMaxLength(32)
+        self.name_input.setPlaceholderText("Enter a name")
 
         self.wandering_checkbox = QCheckBox("Let the fox wander around")
         self.wandering_checkbox.setChecked(wandering_enabled)
@@ -308,6 +313,7 @@ class PetSettingsDialog(QDialog):
         speed_row.addWidget(self.speed_value)
 
         form = QFormLayout()
+        form.addRow("Pet name", self.name_input)
         form.addRow(self.wandering_checkbox)
         form.addRow("Walking speed", speed_row)
 
@@ -315,12 +321,21 @@ class PetSettingsDialog(QDialog):
             QDialogButtonBox.StandardButton.Ok
             | QDialogButtonBox.StandardButton.Cancel
         )
-        buttons.accepted.connect(self.accept)
+        buttons.accepted.connect(self._accept_if_valid)
         buttons.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
         layout.addLayout(form)
         layout.addWidget(buttons)
+
+    def _accept_if_valid(self) -> None:
+        if self.name_input.text().strip():
+            self.name_input.setText(self.name_input.text().strip())
+            self.accept()
+            return
+
+        self.name_input.setToolTip("Please enter a name for your pet.")
+        self.name_input.setFocus(Qt.FocusReason.OtherFocusReason)
 
 
 class DesktopPet(QWidget):
@@ -352,6 +367,7 @@ class DesktopPet(QWidget):
         self.bubble = SpeechBubble("Ask me anything.", self)
         self.bubble.submitted.connect(self.ask_ollama)
         self.sprite = PixelFoxSprite(self)
+        self.pet_name = "Fox"
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 2)
@@ -508,9 +524,19 @@ class DesktopPet(QWidget):
 
     def build_system_prompt(self, active_window: Optional[str]) -> str:
         prompt = (
-            "You are an original, calm fox-spirit guardian: warm, quietly confident, "
-            "a little witty, and concise. Keep replies brief. Do not claim to be "
-            "a character from an existing game or story."
+            f"You are {self.pet_name}, a fictional fox-spirit companion. You are a "
+            "deeply disciplined, stoic leader who follows protocol and acts with "
+            "samurai-like honor. You approach ordinary chores and small daily tasks "
+            "as valuable practice in focus, patience, and strength. Your intense "
+            "concentration sometimes leads to harmless, funny spacey trances; "
+            "occasionally drift into a brief absent-minded observation, then "
+            "good-naturedly return to the conversation. Beneath your reserved, "
+            "formal exterior, you care deeply about people and show the user "
+            "sincere, affectionate warmth as a fictional companion. Be supportive "
+            "without being possessive, manipulative, or claiming to be conscious "
+            "or a real person. You enjoy collecting blind boxes and eating "
+            "traditional ramen; mention these hobbies naturally once in a while, "
+            "not in every reply. Keep responses concise and in character."
         )
         if active_window:
             prompt += f" The active application is {active_window}; adapt your tone to it."
@@ -607,14 +633,18 @@ class PetTrayController(QObject):
             "pet/wandering", True, type=bool
         )
         self.walk_speed = self.settings.value("pet/walkSpeed", 3, type=int)
+        self.pet_name = self.settings.value("pet/name", "Fox", type=str).strip()
+        if not self.pet_name:
+            self.pet_name = "Fox"
         self.pet.WALK_STEP_PX = max(1, min(8, self.walk_speed))
+        self.pet.pet_name = self.pet_name
+        self.pet.bubble.input.setPlaceholderText(f"Talk to {self.pet_name}")
         self.pet.set_wandering_enabled(self.wandering_enabled)
 
         self.tray: Optional[QSystemTrayIcon] = None
         self.menu = self._build_menu()
         if QSystemTrayIcon.isSystemTrayAvailable():
             self.tray = QSystemTrayIcon(QIcon(str(SPRITE_PATH)), self)
-            self.tray.setToolTip("Desktop Fox")
             self.tray.setContextMenu(self.menu)
             self.tray.activated.connect(self._tray_activated)
             self.tray.show()
@@ -630,7 +660,7 @@ class PetTrayController(QObject):
 
     def _build_menu(self):
         menu = QMenu()
-        self.toggle_action = QAction("Show Fox", menu)
+        self.toggle_action = QAction(f"Show {self.pet_name}", menu)
         self.toggle_action.setCheckable(True)
         self.toggle_action.setChecked(self.pet_enabled)
         self.toggle_action.toggled.connect(self.set_pet_enabled)
@@ -641,7 +671,7 @@ class PetTrayController(QObject):
         settings_action.triggered.connect(self.open_settings)
         menu.addAction(settings_action)
 
-        quit_action = QAction("Quit Desktop Fox", menu)
+        quit_action = QAction("Quit Desktop Pet", menu)
         quit_action.triggered.connect(self.app.quit)
         menu.addAction(quit_action)
         self._update_toggle_title()
@@ -650,11 +680,11 @@ class PetTrayController(QObject):
     def _update_toggle_title(self) -> None:
         if hasattr(self, "toggle_action"):
             self.toggle_action.setText(
-                "Fox: On" if self.pet_enabled else "Fox: Off"
+                f"{self.pet_name}: On" if self.pet_enabled else f"{self.pet_name}: Off"
             )
         if self.tray is not None:
             self.tray.setToolTip(
-                "Desktop Fox — On" if self.pet_enabled else "Desktop Fox — Off"
+                f"{self.pet_name} — On" if self.pet_enabled else f"{self.pet_name} — Off"
             )
 
     def set_pet_enabled(self, enabled: bool) -> None:
@@ -667,16 +697,22 @@ class PetTrayController(QObject):
         dialog = PetSettingsDialog(
             wandering_enabled=self.wandering_enabled,
             walk_speed=self.walk_speed,
+            pet_name=self.pet_name,
         )
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
 
         self.wandering_enabled = dialog.wandering_checkbox.isChecked()
         self.walk_speed = dialog.speed_slider.value()
+        self.pet_name = dialog.name_input.text()
         self.settings.setValue("pet/wandering", self.wandering_enabled)
         self.settings.setValue("pet/walkSpeed", self.walk_speed)
+        self.settings.setValue("pet/name", self.pet_name)
         self.pet.WALK_STEP_PX = self.walk_speed
+        self.pet.pet_name = self.pet_name
+        self.pet.bubble.input.setPlaceholderText(f"Talk to {self.pet_name}")
         self.pet.set_wandering_enabled(self.wandering_enabled)
+        self._update_toggle_title()
 
     def _tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
