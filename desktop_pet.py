@@ -57,6 +57,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -76,6 +77,7 @@ MODEL_ARCHIVE_URL = (
     "https://github.com/GlassC0ffin/Desktop-Helper/releases/download/"
     "v1.1.0/DesktopFox-llama3.2-model.tar"
 )
+MODEL_RELEASE_URL = "https://github.com/GlassC0ffin/Desktop-Helper/releases/tag/v1.1.0"
 MODEL_ARCHIVE_SHA256 = "e53ee97170e98c11bbe5da658ca261587f895867443c2a2476e7238629ca1af6"
 MODEL_BLOB_SIZE = 2019377376
 SPRITE_PATH = Path(__file__).resolve().parent / "assets" / "chibi_fox.png"
@@ -351,6 +353,7 @@ class BundledOllamaRuntime:
         self._process: Optional[subprocess.Popen] = None
         self._log_file = None
         self._lock = threading.Lock()
+        self._model_lock = threading.Lock()
         self._runtime_dir, self._executable = self._find_runtime()
 
     @staticmethod
@@ -418,47 +421,36 @@ class BundledOllamaRuntime:
         except (OSError, KeyError, TypeError, json.JSONDecodeError):
             return False
 
-    def _download_model(self, progress: Signal) -> None:
-        archive_path = self.support_dir / "llama3.2-model.download"
+    def _install_model_archive(
+        self,
+        archive_path: Path,
+        progress: Signal,
+        verified_sha256: Optional[str] = None,
+    ) -> None:
         staging_dir = self.support_dir / "model-installing"
+        progress.emit("Verifying local AI model archive…")
         try:
-            request = urllib.request.Request(
-                MODEL_ARCHIVE_URL,
-                headers={"User-Agent": "DesktopFox/1.1.0"},
-            )
-            tls_context = ssl.create_default_context(cafile=certifi.where())
-            with urllib.request.urlopen(
-                request, timeout=60, context=tls_context
-            ) as response:
-                total_bytes = int(response.headers.get("Content-Length", "0"))
-                required = total_bytes + MODEL_BLOB_SIZE + 256 * 1024 * 1024
-                free_bytes = shutil.disk_usage(self.support_dir).free
-                if total_bytes and free_bytes < required:
-                    raise OSError(
-                        "There isn't enough free disk space to install the local "
-                        "AI model. Free at least 4 GB and try again."
-                    )
-
+            if verified_sha256 is None:
                 digest = hashlib.sha256()
-                downloaded = 0
-                last_percent = -1
-                with archive_path.open("wb") as output:
-                    while chunk := response.read(8 * 1024 * 1024):
-                        output.write(chunk)
+                with archive_path.open("rb") as source:
+                    while chunk := source.read(8 * 1024 * 1024):
                         digest.update(chunk)
-                        downloaded += len(chunk)
-                        if total_bytes:
-                            percent = downloaded * 100 // total_bytes
-                            if percent >= last_percent + 2:
-                                progress.emit(
-                                    f"Downloading local AI model… {percent}%"
-                                )
-                                last_percent = percent
+                verified_sha256 = digest.hexdigest()
 
-            if digest.hexdigest() != MODEL_ARCHIVE_SHA256:
+            if verified_sha256 != MODEL_ARCHIVE_SHA256:
                 raise ValueError(
-                    "The downloaded model archive failed its SHA-256 integrity "
-                    "check. Please try again."
+                    "This is not the expected Desktop Fox llama3.2 model archive, "
+                    "or the download is incomplete. Download "
+                    "DesktopFox-llama3.2-model.tar from the v1.1.0 release and "
+                    "select that file."
+                )
+
+            required = MODEL_BLOB_SIZE + 256 * 1024 * 1024
+            free_bytes = shutil.disk_usage(self.support_dir).free
+            if free_bytes < required:
+                raise OSError(
+                    "There isn't enough free disk space to install the local "
+                    "AI model. Free at least 2.3 GB and try again."
                 )
 
             staging_dir.mkdir(parents=True, exist_ok=True)
@@ -496,20 +488,75 @@ class BundledOllamaRuntime:
                     )
                 self.models_dir.rmdir()
             os.replace(staged_models, self.models_dir)
-            progress.emit("Local AI model installed.")
+            if not self._model_is_installed():
+                raise ValueError(
+                    "The extracted model did not pass Ollama manifest validation."
+                )
+            progress.emit("Local AI model installed. You can chat now.")
         finally:
-            archive_path.unlink(missing_ok=True)
             shutil.rmtree(staging_dir, ignore_errors=True)
 
-    def _ensure_model(self, progress: Signal) -> None:
-        if self._model_is_installed():
-            return
-        if MODEL_ARCHIVE_SHA256 == "SET_AFTER_MODEL_ARCHIVE_BUILD":
-            raise RuntimeError(
-                "The model download hasn't been configured for this release."
+    def install_model_archive(self, archive_path: Path, progress: Signal) -> None:
+        with self._model_lock:
+            if self._model_is_installed():
+                progress.emit("Local AI model is already installed.")
+                return
+            self._install_model_archive(archive_path, progress)
+
+    def _download_model(self, progress: Signal) -> None:
+        archive_path = self.support_dir / "llama3.2-model.download"
+        try:
+            request = urllib.request.Request(
+                MODEL_ARCHIVE_URL,
+                headers={"User-Agent": "DesktopFox/1.4.0"},
             )
-        progress.emit("Downloading the local AI model (about 1.9 GB)…")
-        self._download_model(progress)
+            tls_context = ssl.create_default_context(cafile=certifi.where())
+            with urllib.request.urlopen(
+                request, timeout=60, context=tls_context
+            ) as response:
+                total_bytes = int(response.headers.get("Content-Length", "0"))
+                required = total_bytes + MODEL_BLOB_SIZE + 256 * 1024 * 1024
+                free_bytes = shutil.disk_usage(self.support_dir).free
+                if total_bytes and free_bytes < required:
+                    raise OSError(
+                        "There isn't enough free disk space to install the local "
+                        "AI model. Free at least 4 GB and try again."
+                    )
+
+                digest = hashlib.sha256()
+                downloaded = 0
+                last_percent = -1
+                with archive_path.open("wb") as output:
+                    while chunk := response.read(8 * 1024 * 1024):
+                        output.write(chunk)
+                        digest.update(chunk)
+                        downloaded += len(chunk)
+                        if total_bytes:
+                            percent = downloaded * 100 // total_bytes
+                            if percent >= last_percent + 2:
+                                progress.emit(
+                                    f"Downloading local AI model… {percent}%"
+                                )
+                                last_percent = percent
+
+            self._install_model_archive(
+                archive_path,
+                progress,
+                verified_sha256=digest.hexdigest(),
+            )
+        finally:
+            archive_path.unlink(missing_ok=True)
+
+    def _ensure_model(self, progress: Signal) -> None:
+        with self._model_lock:
+            if self._model_is_installed():
+                return
+            if MODEL_ARCHIVE_SHA256 == "SET_AFTER_MODEL_ARCHIVE_BUILD":
+                raise RuntimeError(
+                    "The model download hasn't been configured for this release."
+                )
+            progress.emit("Downloading the local AI model (about 1.9 GB)…")
+            self._download_model(progress)
 
     def _server_is_ready(self) -> bool:
         try:
@@ -634,9 +681,41 @@ class OllamaWorker(QThread):
             text = result.message.content.strip()
             self.response_ready.emit(text or "I don't have anything to say just now.")
         except Exception as exc:
+            if isinstance(exc, urllib.error.HTTPError) and exc.code == 404:
+                self.error_occurred.emit(
+                    "GitHub could not provide the model archive. If your "
+                    "repository is private, open the v1.1.0 release while signed "
+                    "in to GitHub, download DesktopFox-llama3.2-model.tar, then "
+                    "choose “Install AI Model from File…” in the menu-bar menu. "
+                    f"Release: {MODEL_RELEASE_URL}"
+                )
+                return
             self.error_occurred.emit(
                 f"Local AI setup or chat failed: {exc}"
             )
+
+
+class ModelArchiveWorker(QThread):
+    """Verify and install a model archive without blocking the GUI."""
+
+    error_occurred = Signal(str)
+    progress = Signal(str)
+
+    def __init__(
+        self,
+        runtime: BundledOllamaRuntime,
+        archive_path: Path,
+        parent: Optional[QWidget] = None,
+    ) -> None:
+        super().__init__(parent)
+        self.runtime = runtime
+        self.archive_path = archive_path
+
+    def run(self) -> None:
+        try:
+            self.runtime.install_model_archive(self.archive_path, self.progress)
+        except Exception as exc:
+            self.error_occurred.emit(f"Model installation failed: {exc}")
 
 
 class PetSettingsDialog(QDialog):
@@ -714,6 +793,7 @@ class DesktopPet(QWidget):
         self.runtime = runtime or BundledOllamaRuntime()
         self._drag_offset: Optional[QPoint] = None
         self._worker: Optional[OllamaWorker] = None
+        self._model_install_worker: Optional[ModelArchiveWorker] = None
         self._movie: Optional[QMovie] = None
         self._activity = "walking"
         self._velocity_x = 0.0
@@ -931,6 +1011,29 @@ class DesktopPet(QWidget):
         worker.finished.connect(self._request_finished)
         worker.start()
 
+    def install_model_archive(self, archive_path: Path) -> None:
+        if (
+            self._model_install_worker is not None
+            and self._model_install_worker.isRunning()
+        ):
+            self.show_response("The local AI model is already being installed.")
+            return
+
+        self.show_response("Verifying the selected model archive…")
+        worker = ModelArchiveWorker(
+            runtime=self.runtime,
+            archive_path=archive_path,
+            parent=self,
+        )
+        self._model_install_worker = worker
+        worker.progress.connect(self.show_response)
+        worker.error_occurred.connect(self.show_response)
+        worker.finished.connect(self._model_install_finished)
+        worker.start()
+
+    def _model_install_finished(self) -> None:
+        self._model_install_worker = None
+
     def configure_macos_overlay(self) -> None:
         """Make the Qt tool window a non-activating floating macOS panel."""
         if sys.platform != "darwin":
@@ -1067,6 +1170,10 @@ class PetTrayController(QObject):
             character_menu.addAction(action)
         self.character_group.triggered.connect(self._select_character_action)
 
+        install_model_action = QAction("Install AI Model from File…", menu)
+        install_model_action.triggered.connect(self.install_model_from_file)
+        menu.addAction(install_model_action)
+
         settings_action = QAction("Settings…", menu)
         settings_action.triggered.connect(self.open_settings)
         menu.addAction(settings_action)
@@ -1076,6 +1183,16 @@ class PetTrayController(QObject):
         menu.addAction(quit_action)
         self._update_toggle_title()
         return menu
+
+    def install_model_from_file(self) -> None:
+        archive_path, _ = QFileDialog.getOpenFileName(
+            self.pet,
+            "Choose DesktopFox-llama3.2-model.tar downloaded from GitHub",
+            str(Path.home() / "Downloads"),
+            "Desktop Fox model archive (DesktopFox-llama3.2-model.tar);;Tar archives (*.tar)",
+        )
+        if archive_path:
+            self.pet.install_model_archive(Path(archive_path))
 
     def _select_character_action(self, action: QAction) -> None:
         character_id = str(action.data())

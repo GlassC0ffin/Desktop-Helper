@@ -24,9 +24,22 @@ model the first time you send a chat message.
    and download `DesktopFox-macOS.zip`.
 2. Unzip it, move `DesktopFox.app` into Applications if desired, and open the
    app from Finder.
-3. Type a message in the speech bubble. The first chat automatically downloads
-   the approximately 1.9 GB llama3.2 model. Keep the app open and connected to
-   the internet until setup finishes. Later chats use the local model.
+3. Type a message in the speech bubble. The first chat attempts to download
+   the approximately 1.9 GB llama3.2 model automatically. Keep the app open
+   and connected to the internet until setup finishes. Later chats use the
+   local model.
+
+If GitHub reports that the model asset cannot be found (for example, because
+the repository is private):
+
+1. While signed in to GitHub with an account that can access this repository,
+   open the [v1.1.0 model release](https://github.com/GlassC0ffin/Desktop-Helper/releases/tag/v1.1.0)
+   and download `DesktopFox-llama3.2-model.tar` (not the source-code archive).
+2. In Desktop Fox, open the menu-bar menu and choose **Install AI Model from
+   File…**, then select the downloaded `.tar`.
+
+The app verifies the archive's SHA-256 before safely installing it. It does
+not need or store your GitHub password or access token.
 
 The app bundles Ollama and starts its local server automatically when chat is
 used. The model and server log are stored in
@@ -79,6 +92,9 @@ and open it.
 - Type in the speech bubble and press Return or the send button to chat.
 - The first chat downloads and installs the local model. A progress message
   appears in the bubble.
+- For a private repository, download `DesktopFox-llama3.2-model.tar` from the
+  v1.1.0 release in a signed-in browser, then choose **Install AI Model from
+  File…** in the menu-bar menu.
 - If setup fails, check your internet connection and available disk space.
   The Ollama server log is at
   `~/Library/Application Support/DesktopFox/ollama.log`.
