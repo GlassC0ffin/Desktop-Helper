@@ -23,6 +23,31 @@ python3 -m http.server 8000
 # then open http://localhost:8000
 ```
 
+## Desktop Fox macOS app
+
+The Python desktop pet can be packaged as a normal macOS app bundle, so it
+doesn't need to stay attached to a Terminal window.
+
+On a Mac, build it with:
+
+```bash
+chmod +x build_macos.sh
+./build_macos.sh
+```
+
+The script creates `dist/DesktopFox.app` and a shareable
+`dist/DesktopFox-macOS.zip`. Open the app from Finder or move it into
+Applications. Ollama must also be installed and running, with the model
+available locally:
+
+```bash
+ollama pull llama3.2
+```
+
+The app bundle and archive are local build outputs and are not committed.
+To distribute the app broadly, sign it with an Apple Developer ID and
+notarize it; otherwise macOS may warn recipients when they open it.
+
 ## Deploy
 
 This project deploys with **[Cloudflare Pages / GitHub Pages — pick
