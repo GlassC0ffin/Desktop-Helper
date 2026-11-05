@@ -1,107 +1,116 @@
 # Desktop Fox
 
-A small macOS menu-bar app with a wandering desktop companion and a local
-Ollama-powered chat bubble. The app can be hidden or shown from the menu-bar
-icon, and its name and walking behavior can be changed in Settings.
+A macOS menu-bar app with a wandering desktop companion and local AI chat.
+The app bundles the Ollama runtime and automatically downloads the llama3.2
+model the first time you send a chat message.
 
-> **Prebuilt download:** [Download the latest DesktopFox release for Apple silicon](https://github.com/GlassC0ffin/Desktop-Helper/releases/latest).
-> This app is not signed or notarized; see the first-launch notes below.
+> **Download:** [Get the latest Desktop Fox release for Apple silicon](https://github.com/GlassC0ffin/Desktop-Helper/releases/latest).
+> The model is a separate release asset and downloads automatically on first
+> chat. This app is not signed or notarized; see the security notes below.
 
 ## Requirements
 
-- macOS. Build on the Mac where you plan to use the app; the build uses that
-  Mac's CPU architecture. Apple silicon is the tested configuration. An app
-  built for Apple silicon will not run natively on an Intel Mac, or vice versa.
-- Python 3.12 or newer ([download Python](https://www.python.org/downloads/macos/))
-  and an internet connection for the first build.
-- [Ollama for macOS](https://ollama.com/download) for AI chat. The fox works
-  without Ollama, but it cannot answer chat questions until Ollama is running
-  with a model installed.
+- macOS. Apple silicon is the tested configuration. Builds use the CPU
+  architecture of the Mac that creates them.
+- Internet access and about 4 GB of free disk space for the one-time model
+  download and installation.
+- Python 3.12+ and Ollama for macOS are required only to build the app and
+  release assets. People installing the prebuilt app do not need to install
+  Python or Ollama separately.
 
-## Build and install
+## Install the prebuilt app
 
-1. Install Ollama from [ollama.com/download](https://ollama.com/download).
-   Open Ollama and download the default model from Terminal:
+1. Open the [latest Desktop Fox release](https://github.com/GlassC0ffin/Desktop-Helper/releases/latest)
+   and download `DesktopFox-macOS.zip`.
+2. Unzip it, move `DesktopFox.app` into Applications if desired, and open the
+   app from Finder.
+3. Type a message in the speech bubble. The first chat automatically downloads
+   the approximately 1.9 GB llama3.2 model. Keep the app open and connected to
+   the internet until setup finishes. Later chats use the local model.
+
+The app bundles Ollama and starts its local server automatically when chat is
+used. The model and server log are stored in
+`~/Library/Application Support/DesktopHelper/DesktopFox` and reused between
+launches.
+
+## Build from source
+
+1. Install [Python 3.12 or newer](https://www.python.org/downloads/macos/) and
+   [Ollama for macOS](https://ollama.com/download).
+2. Download or clone the repository. Then, from Terminal, go to the
+   `Desktop-Helper` project folder and prepare the model:
 
    ```bash
    ollama pull llama3.2
+   ./prepare_model_archive.sh
    ```
 
-2. Download this repository from GitHub using **Code → Download ZIP**, then
-   unzip it. Or clone it with Git:
-
-   ```bash
-   git clone https://github.com/GlassC0ffin/Descktop-Helper.git
-   ```
-
-3. Open Terminal and change to the unzipped project folder. For a cloned
-   repository, run `cd Descktop-Helper`. For a downloaded ZIP, type `cd ` in
-   Terminal, drag the unzipped `Descktop-Helper-main` folder from Finder into
-   the Terminal window, then press Return. Build the app:
+3. Build the macOS app:
 
    ```bash
    ./build_macos.sh
    ```
 
-   The build script creates an isolated `.venv-build`, installs the needed
-   Python packages, and builds:
+The scripts create an isolated `.venv-build` and produce:
 
-   - `dist/DesktopFox.app` — the macOS app
-   - `dist/DesktopFox-macOS.zip` — an archive for another Mac with the same
-     CPU architecture
+- `dist/DesktopFox.app` and `dist/DesktopFox-macOS.zip`
+- `dist/DesktopFox-llama3.2-model.tar`, to upload as a separate GitHub Release
+  asset named exactly `DesktopFox-llama3.2-model.tar`
 
-4. Open `dist` in Finder and move `DesktopFox.app` into Applications if you
-   want it there. Open the app from Finder. Once it has launched, you can quit
-   Terminal; the pet app does not need to stay attached to that Terminal
-   session.
-
-The first build needs internet access to install build dependencies. It can
-take a few minutes. The resulting app is self-contained; Python is not needed
-to run it. Ollama remains a separate app and must be running for AI chat.
+The model archive is about 1.9 GB and is intentionally kept out of Git source
+history. GitHub limits each release asset to under 2 GiB, so publish the model
+separately from the app ZIP. The app's first-run model download URL is defined
+in `desktop_pet.py`.
 
 ## First launch and macOS security
 
-The app built from this repository is not signed or notarized with an Apple
-Developer ID. macOS may warn when opening it. Only open apps you trust. If
-Gatekeeper blocks an app that you built yourself from this source, use
-**Control-click → Open** in Finder to review and open it.
+This app is not signed or notarized with an Apple Developer ID, so macOS may
+show a warning when opening it. Only open apps you trust. If Gatekeeper blocks
+an app you built yourself, use **Control-click → Open** in Finder to review
+and open it.
 
 ## Use the pet
 
 - Click the fox's menu-bar icon to turn the pet on or off.
-- Choose **Settings…** to change its name, enable or disable wandering, and
-  adjust walking speed.
-- Type in the pet's speech bubble and press Return or the send button to chat.
-- Keep Ollama open and the `llama3.2` model installed for chat. If chat cannot
-  connect, check that Ollama is running and try `ollama list` in Terminal.
-- Choose **Quit Desktop Pet** from the menu-bar menu to exit the app.
+- Choose **Settings…** to change its name, wandering behavior, and walking
+  speed.
+- Type in the speech bubble and press Return or the send button to chat.
+- The first chat downloads and installs the local model. A progress message
+  appears in the bubble.
+- If setup fails, check your internet connection and available disk space.
+  The Ollama server log is at
+  `~/Library/Application Support/DesktopFox/ollama.log`.
+- Choose **Quit Desktop Pet** from the menu-bar menu to exit.
 
 The AI personality prompt is in `DesktopPet.build_system_prompt()` in
-`desktop_pet.py`. User preferences, including the pet's name, are saved by
-macOS and survive app restarts.
+`desktop_pet.py`. Preferences such as the pet's name persist across launches.
 
-## Build from source / run with Python
+## Model and third-party licenses
 
-To run the script directly instead of building the app:
+This app redistributes Meta Llama 3.2 under the Llama 3.2 Community License and
+its Acceptable Use Policy. License terms and the required notice are included
+in the app's `licenses` directory. The chat bubble displays **Built with
+Llama**. The Ollama runtime and its third-party license notices are also
+bundled with the app.
+
+## Run from Python
+
+Running the source script uses the locally installed Ollama app:
 
 ```bash
 python3 -m pip install -r requirements-desktop.txt
 python3 desktop_pet.py
 ```
 
-Building the `.app` is recommended for everyday use because it can be launched
-from Finder without keeping a Terminal window open.
-
 ## Project files
 
-- `desktop_pet.py` — PySide6 app, menu-bar controls, pet movement, and Ollama
-  chat.
-- `assets/chibi_fox.png` — companion artwork used by the app and its icon.
-- `build_macos.sh` — macOS app and ZIP build script.
+- `desktop_pet.py` — PySide6 app, menu-bar controls, movement, and Ollama chat.
+- `assets/chibi_fox.png` — companion artwork and app icon source.
+- `build_macos.sh` — app bundle and app ZIP build script.
+- `prepare_model_archive.sh` — prepares the separately published model asset.
+- `licenses/` — third-party license terms and required notices.
 - `requirements-desktop.txt` — Python dependencies for running and packaging.
-- GitHub Releases — prebuilt app downloads for Apple silicon Macs.
 
-The repository also contains a small, independent browser canvas demo. To run
-it, open `index.html` in a browser. If ES module imports are blocked over
-`file://`, run `python3 -m http.server 8000` from the repository folder and
-visit `http://localhost:8000`.
+The repository also contains an independent browser canvas demo. Open
+`index.html` in a browser, or run `python3 -m http.server 8000` and visit
+`http://localhost:8000` if the browser blocks ES module imports over `file://`.

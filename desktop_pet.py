@@ -9,13 +9,34 @@ Run:
 
 from __future__ import annotations
 
+import hashlib
+import json
+import os
 import random
+import shutil
+import signal
+import socket
+import subprocess
 import sys
+import tarfile
+import threading
+import time
+import urllib.request
 from pathlib import Path
 from typing import Optional
 
 import ollama
-from PySide6.QtCore import QObject, QPoint, QSize, Qt, QThread, QTimer, Signal
+from PySide6.QtCore import (
+    QObject,
+    QPoint,
+    QSettings,
+    QSize,
+    QStandardPaths,
+    Qt,
+    QThread,
+    QTimer,
+    Signal,
+)
 from PySide6.QtGui import (
     QAction,
     QColor,
@@ -44,11 +65,16 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from PySide6.QtCore import QSettings
 
 
-OLLAMA_HOST = "http://localhost:11434"
+OLLAMA_HOST = "http://127.0.0.1"
 DEFAULT_MODEL = "llama3.2"
+MODEL_ARCHIVE_URL = (
+    "https://github.com/GlassC0ffin/Desktop-Helper/releases/download/"
+    "v1.1.0/DesktopFox-llama3.2-model.tar"
+)
+MODEL_ARCHIVE_SHA256 = "e53ee97170e98c11bbe5da658ca261587f895867443c2a2476e7238629ca1af6"
+MODEL_BLOB_SIZE = 2019377376
 SPRITE_PATH = Path(__file__).resolve().parent / "assets" / "chibi_fox.png"
 
 
@@ -109,6 +135,11 @@ class SpeechBubble(QWidget):
         layout.setSpacing(8)
         layout.addWidget(self.label)
         layout.addLayout(input_row)
+        self.attribution = QLabel("Built with Llama", self)
+        self.attribution.setStyleSheet(
+            "QLabel { color: #b7a8df; font-size: 10px; background: transparent; }"
+        )
+        layout.addWidget(self.attribution)
         self.setMinimumWidth(330)
         self.setMaximumWidth(400)
 
@@ -233,17 +264,277 @@ class PixelFoxSprite(QWidget):
             )
 
 
+class BundledOllamaRuntime:
+    """Starts the bundled Ollama server and installs the model on first use."""
+
+    def __init__(self) -> None:
+        app_data = QStandardPaths.writableLocation(
+            QStandardPaths.StandardLocation.AppDataLocation
+        )
+        self.support_dir = Path(
+            app_data
+            or Path.home() / "Library/Application Support/DesktopHelper/DesktopFox"
+        )
+        self.support_dir.mkdir(parents=True, exist_ok=True)
+        self.models_dir = (
+            Path(os.environ.get("OLLAMA_MODELS", Path.home() / ".ollama/models"))
+            if not getattr(sys, "frozen", False)
+            else self.support_dir / "ollama-models"
+        )
+        self.host = f"{OLLAMA_HOST}:{self._select_port()}"
+        self.log_path = self.support_dir / "ollama.log"
+        self._process: Optional[subprocess.Popen] = None
+        self._log_file = None
+        self._lock = threading.Lock()
+        self._runtime_dir, self._executable = self._find_runtime()
+
+    @staticmethod
+    def _select_port() -> int:
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            return int(sock.getsockname()[1])
+
+    @staticmethod
+    def _find_runtime() -> tuple[Path, Path]:
+        candidates: list[Path] = []
+        if getattr(sys, "frozen", False):
+            executable_dir = Path(sys.executable).resolve().parent
+            candidates.extend(
+                [
+                    Path(getattr(sys, "_MEIPASS", executable_dir))
+                    / "ollama_runtime",
+                    executable_dir.parent / "Resources" / "ollama_runtime",
+                ]
+            )
+        else:
+            installed = Path("/Applications/Ollama.app/Contents/Resources")
+            candidates.append(installed)
+            command = shutil.which("ollama")
+            if command:
+                candidates.append(Path(command).resolve().parent)
+
+        for runtime_dir in candidates:
+            executable = runtime_dir / "ollama"
+            if executable.is_file() and os.access(executable, os.X_OK):
+                return runtime_dir, executable
+
+        raise FileNotFoundError(
+            "The bundled Ollama runtime is missing. Reinstall Desktop Fox. "
+            "When running from source, install Ollama for macOS first."
+        )
+
+    def _model_is_installed(self) -> bool:
+        manifest_path = (
+            self.models_dir
+            / "manifests"
+            / "registry.ollama.ai"
+            / "library"
+            / DEFAULT_MODEL
+            / "latest"
+        )
+        if not manifest_path.is_file():
+            return False
+
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            model_layers = [
+                layer
+                for layer in manifest["layers"]
+                if layer.get("mediaType") == "application/vnd.ollama.image.model"
+            ]
+            return bool(model_layers) and all(
+                (
+                    self.models_dir
+                    / "blobs"
+                    / f"sha256-{layer['digest'].removeprefix('sha256:')}"
+                ).is_file()
+                for layer in model_layers
+            )
+        except (OSError, KeyError, TypeError, json.JSONDecodeError):
+            return False
+
+    def _download_model(self, progress: Signal) -> None:
+        archive_path = self.support_dir / "llama3.2-model.download"
+        staging_dir = self.support_dir / "model-installing"
+        try:
+            request = urllib.request.Request(
+                MODEL_ARCHIVE_URL,
+                headers={"User-Agent": "DesktopFox/1.1.0"},
+            )
+            with urllib.request.urlopen(request, timeout=60) as response:
+                total_bytes = int(response.headers.get("Content-Length", "0"))
+                required = total_bytes + MODEL_BLOB_SIZE + 256 * 1024 * 1024
+                free_bytes = shutil.disk_usage(self.support_dir).free
+                if total_bytes and free_bytes < required:
+                    raise OSError(
+                        "There isn't enough free disk space to install the local "
+                        "AI model. Free at least 4 GB and try again."
+                    )
+
+                digest = hashlib.sha256()
+                downloaded = 0
+                last_percent = -1
+                with archive_path.open("wb") as output:
+                    while chunk := response.read(8 * 1024 * 1024):
+                        output.write(chunk)
+                        digest.update(chunk)
+                        downloaded += len(chunk)
+                        if total_bytes:
+                            percent = downloaded * 100 // total_bytes
+                            if percent >= last_percent + 2:
+                                progress.emit(
+                                    f"Downloading local AI model… {percent}%"
+                                )
+                                last_percent = percent
+
+            if digest.hexdigest() != MODEL_ARCHIVE_SHA256:
+                raise ValueError(
+                    "The downloaded model archive failed its SHA-256 integrity "
+                    "check. Please try again."
+                )
+
+            staging_dir.mkdir(parents=True, exist_ok=True)
+            with tarfile.open(archive_path, mode="r:") as archive:
+                members = archive.getmembers()
+                for member in members:
+                    member_path = Path(member.name)
+                    if (
+                        member_path.is_absolute()
+                        or ".." in member_path.parts
+                        or not member_path.parts
+                        or member_path.parts[0] != "models"
+                        or not (member.isfile() or member.isdir())
+                    ):
+                        raise ValueError(
+                            "The model archive contains an unsafe or unsupported file."
+                        )
+                archive.extractall(staging_dir, members=members, filter="data")
+
+            staged_models = staging_dir / "models"
+            manifest = (
+                staged_models
+                / "manifests"
+                / "registry.ollama.ai"
+                / "library"
+                / DEFAULT_MODEL
+                / "latest"
+            )
+            if not manifest.is_file():
+                raise ValueError("The model archive is missing its Ollama manifest.")
+            if self.models_dir.exists():
+                if any(self.models_dir.iterdir()):
+                    raise FileExistsError(
+                        f"Model destination already exists: {self.models_dir}"
+                    )
+                self.models_dir.rmdir()
+            os.replace(staged_models, self.models_dir)
+            progress.emit("Local AI model installed.")
+        finally:
+            archive_path.unlink(missing_ok=True)
+            shutil.rmtree(staging_dir, ignore_errors=True)
+
+    def _ensure_model(self, progress: Signal) -> None:
+        if self._model_is_installed():
+            return
+        if MODEL_ARCHIVE_SHA256 == "SET_AFTER_MODEL_ARCHIVE_BUILD":
+            raise RuntimeError(
+                "The model download hasn't been configured for this release."
+            )
+        progress.emit("Downloading the local AI model (about 1.9 GB)…")
+        self._download_model(progress)
+
+    def _server_is_ready(self) -> bool:
+        try:
+            with urllib.request.urlopen(f"{self.host}/api/tags", timeout=1):
+                return True
+        except OSError:
+            return False
+
+    def _ensure_server(self) -> None:
+        with self._lock:
+            if self._server_is_ready():
+                return
+
+            if self._process is not None and self._process.poll() is not None:
+                self._process = None
+
+            if self._process is None:
+                environment = os.environ.copy()
+                environment["OLLAMA_HOST"] = self.host.removeprefix("http://")
+                environment["OLLAMA_MODELS"] = str(self.models_dir)
+                self._log_file = self.log_path.open("ab")
+                try:
+                    self._process = subprocess.Popen(
+                        [str(self._executable), "serve"],
+                        cwd=self._runtime_dir,
+                        env=environment,
+                        stdout=self._log_file,
+                        stderr=subprocess.STDOUT,
+                        start_new_session=True,
+                    )
+                except OSError as exc:
+                    self._log_file.close()
+                    self._log_file = None
+                    raise RuntimeError(
+                        f"Couldn't start bundled Ollama: {exc}"
+                    ) from exc
+
+            deadline = time.monotonic() + 60
+            while time.monotonic() < deadline:
+                if self._server_is_ready():
+                    return
+                if self._process.poll() is not None:
+                    break
+                time.sleep(0.25)
+
+            log_tail = ""
+            if self.log_path.exists():
+                log_tail = self.log_path.read_text(
+                    encoding="utf-8", errors="replace"
+                )[-1500:]
+            raise RuntimeError(
+                "Bundled Ollama did not start. Its log is at "
+                f"{self.log_path}.\n{log_tail}"
+            )
+
+    def ensure_ready(self, progress: Signal) -> None:
+        self._ensure_model(progress)
+        self._ensure_server()
+
+    def stop(self) -> None:
+        with self._lock:
+            if self._process is not None and self._process.poll() is None:
+                try:
+                    os.killpg(self._process.pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                try:
+                    self._process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    try:
+                        os.killpg(self._process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    self._process.wait(timeout=5)
+            self._process = None
+            if self._log_file is not None:
+                self._log_file.close()
+                self._log_file = None
+
+
 class OllamaWorker(QThread):
     """Run an Ollama request off the GUI thread."""
 
     response_ready = Signal(str)
     error_occurred = Signal(str)
+    progress = Signal(str)
 
     def __init__(
         self,
         model: str,
         system_prompt: str,
         user_text: str,
+        runtime: BundledOllamaRuntime,
         image_path: Optional[str] = None,
         parent: Optional[QWidget] = None,
     ) -> None:
@@ -251,6 +542,7 @@ class OllamaWorker(QThread):
         self.model = model
         self.system_prompt = system_prompt
         self.user_text = user_text
+        self.runtime = runtime
         self.image_path = image_path
 
     def run(self) -> None:
@@ -262,7 +554,8 @@ class OllamaWorker(QThread):
             user_message["images"] = [self.image_path]
 
         try:
-            client = ollama.Client(host=OLLAMA_HOST, timeout=60.0)
+            self.runtime.ensure_ready(self.progress)
+            client = ollama.Client(host=self.runtime.host, timeout=300.0)
             result = client.chat(
                 model=self.model,
                 messages=[
@@ -274,8 +567,7 @@ class OllamaWorker(QThread):
             self.response_ready.emit(text or "I don't have anything to say just now.")
         except Exception as exc:
             self.error_occurred.emit(
-                f"Couldn't reach Ollama: {exc}\n"
-                "Check that Ollama is running and the model is available."
+                f"Local AI setup or chat failed: {exc}"
             )
 
 
@@ -344,9 +636,14 @@ class DesktopPet(QWidget):
     WALK_STEP_PX = 3
     WALK_INTERVAL_MS = 40
 
-    def __init__(self, model: str = DEFAULT_MODEL) -> None:
+    def __init__(
+        self,
+        model: str = DEFAULT_MODEL,
+        runtime: Optional[BundledOllamaRuntime] = None,
+    ) -> None:
         super().__init__()
         self.model = model
+        self.runtime = runtime or BundledOllamaRuntime()
         self._drag_offset: Optional[QPoint] = None
         self._worker: Optional[OllamaWorker] = None
         self._movie: Optional[QMovie] = None
@@ -553,12 +850,14 @@ class DesktopPet(QWidget):
             model=self.model,
             system_prompt=self.build_system_prompt(self.detect_active_window()),
             user_text=question,
+            runtime=self.runtime,
             image_path=self.capture_homework_context(),
             parent=self,
         )
         self._worker = worker
         worker.response_ready.connect(self.show_response)
         worker.error_occurred.connect(self.show_response)
+        worker.progress.connect(self.show_response)
         worker.finished.connect(self._request_finished)
         worker.start()
 
@@ -725,7 +1024,9 @@ def main() -> int:
     app.setApplicationName("DesktopFox")
     app.setQuitOnLastWindowClosed(False)
 
-    pet = DesktopPet()
+    runtime = BundledOllamaRuntime()
+    app.aboutToQuit.connect(runtime.stop)
+    pet = DesktopPet(runtime=runtime)
     app.pet = pet
 
     screen = app.primaryScreen()
