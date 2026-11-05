@@ -71,7 +71,9 @@ and open it.
 
 ## Use the pet
 
-- Click the fox's menu-bar icon to turn the pet on or off.
+- Click the character's menu-bar icon to turn the pet on or off.
+- Use **Choose Character** in the menu-bar menu to switch between Fox,
+  Guardian, and Maid. Each has its own artwork, personality, and saved name.
 - Choose **Settings…** to change its name, wandering behavior, and walking
   speed.
 - Type in the speech bubble and press Return or the send button to chat.
@@ -105,7 +107,7 @@ python3 desktop_pet.py
 ## Project files
 
 - `desktop_pet.py` — PySide6 app, menu-bar controls, movement, and Ollama chat.
-- `assets/chibi_fox.png` — companion artwork and app icon source.
+- `assets/` — fox, guardian, and maid character artwork.
 - `build_macos.sh` — app bundle and app ZIP build script.
 - `prepare_model_archive.sh` — prepares the separately published model asset.
 - `licenses/` — third-party license terms and required notices.

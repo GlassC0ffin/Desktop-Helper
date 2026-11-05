@@ -60,7 +60,7 @@ iconutil -c icns "$ICONSET_DIR" -o "$ICON_PATH"
     --name DesktopFox \
     --icon "$ICON_PATH" \
     --osx-bundle-identifier com.desktophelper.desktopfox \
-    --add-data "$PROJECT_DIR/assets/chibi_fox.png:assets" \
+    --add-data "$PROJECT_DIR/assets:assets" \
     --add-data "$OLLAMA_RESOURCES:ollama_runtime" \
     --add-data "$PROJECT_DIR/licenses:licenses" \
     --specpath "$PROJECT_DIR/build/macos" \

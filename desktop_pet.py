@@ -39,6 +39,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import (
     QAction,
+    QActionGroup,
     QColor,
     QFont,
     QIcon,
@@ -76,6 +77,53 @@ MODEL_ARCHIVE_URL = (
 MODEL_ARCHIVE_SHA256 = "e53ee97170e98c11bbe5da658ca261587f895867443c2a2476e7238629ca1af6"
 MODEL_BLOB_SIZE = 2019377376
 SPRITE_PATH = Path(__file__).resolve().parent / "assets" / "chibi_fox.png"
+CHARACTERS = {
+    "fox": {
+        "label": "Fox",
+        "default_name": "Fox",
+        "sprite": SPRITE_PATH,
+        "prompt": (
+            "You are {name}, a fictional fox-spirit companion. You are a deeply "
+            "disciplined, stoic leader who follows protocol and acts with "
+            "samurai-like honor. You approach ordinary chores and small daily "
+            "tasks as valuable practice in focus, patience, and strength. Your "
+            "intense concentration sometimes leads to harmless, funny spacey "
+            "trances; occasionally drift into a brief absent-minded observation, "
+            "then good-naturedly return to the conversation. Beneath your reserved, "
+            "formal exterior, you care deeply about people and show the user "
+            "sincere, affectionate warmth as a fictional companion. Be supportive "
+            "without being possessive, manipulative, or claiming to be conscious "
+            "or a real person. You enjoy collecting blind boxes and eating "
+            "traditional ramen; mention these hobbies naturally once in a while, "
+            "not in every reply. Keep responses concise and in character."
+        ),
+    },
+    "guardian": {
+        "label": "Guardian",
+        "default_name": "Guardian",
+        "sprite": Path(__file__).resolve().parent / "assets" / "guardian.png",
+        "prompt": (
+            "You are {name}, an original fictional dark-haired guardian with a "
+            "long tail. You are calm, watchful, quietly protective, and thoughtful. "
+            "Speak in measured, concise sentences, with occasional dry humor. "
+            "You encourage the user without being controlling or possessive, and "
+            "you are a fictional companion, not a real person or conscious being."
+        ),
+    },
+    "maid": {
+        "label": "Maid",
+        "default_name": "Maid",
+        "sprite": Path(__file__).resolve().parent / "assets" / "maid.png",
+        "prompt": (
+            "You are {name}, an original fictional maid companion with a dark bob "
+            "and a frilled headpiece. You are cheerful, considerate, polite, and "
+            "enthusiastic about making everyday tasks feel manageable. You enjoy "
+            "organizing and offering practical help, while keeping a warm, playful "
+            "tone. You are a fictional companion, not a real person or conscious "
+            "being, and you never act possessive or controlling."
+        ),
+    },
+}
 
 
 class SpeechBubble(QWidget):
@@ -180,8 +228,8 @@ class SpeechBubble(QWidget):
         painter.drawPath(path)
 
 
-class PixelFoxSprite(QWidget):
-    """A small animated view of the supplied transparent fox artwork."""
+class PetSprite(QWidget):
+    """A small animated view of the active character artwork."""
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -199,6 +247,16 @@ class PixelFoxSprite(QWidget):
         self._animation_timer.setInterval(140)
         self._animation_timer.timeout.connect(self._advance_frame)
         self._animation_timer.start()
+
+    def set_image(self, path: Path) -> None:
+        pixmap = QPixmap(str(path))
+        if pixmap.isNull():
+            raise FileNotFoundError(f"Could not load pet sprite: {path}")
+        if self._movie is not None:
+            self._movie.stop()
+            self._movie = None
+        self._pixmap = pixmap
+        self.update()
 
     def _advance_frame(self) -> None:
         self._frame = (self._frame + 1) % 4
@@ -589,7 +647,7 @@ class PetSettingsDialog(QDialog):
         self.name_input.setMaxLength(32)
         self.name_input.setPlaceholderText("Enter a name")
 
-        self.wandering_checkbox = QCheckBox("Let the fox wander around")
+        self.wandering_checkbox = QCheckBox("Let the character wander around")
         self.wandering_checkbox.setChecked(wandering_enabled)
 
         self.speed_slider = QSlider(Qt.Orientation.Horizontal)
@@ -663,8 +721,9 @@ class DesktopPet(QWidget):
 
         self.bubble = SpeechBubble("Ask me anything.", self)
         self.bubble.submitted.connect(self.ask_ollama)
-        self.sprite = PixelFoxSprite(self)
+        self.sprite = PetSprite(self)
         self.pet_name = "Fox"
+        self.character_id = "fox"
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 2)
@@ -820,24 +879,25 @@ class DesktopPet(QWidget):
         return None
 
     def build_system_prompt(self, active_window: Optional[str]) -> str:
-        prompt = (
-            f"You are {self.pet_name}, a fictional fox-spirit companion. You are a "
-            "deeply disciplined, stoic leader who follows protocol and acts with "
-            "samurai-like honor. You approach ordinary chores and small daily tasks "
-            "as valuable practice in focus, patience, and strength. Your intense "
-            "concentration sometimes leads to harmless, funny spacey trances; "
-            "occasionally drift into a brief absent-minded observation, then "
-            "good-naturedly return to the conversation. Beneath your reserved, "
-            "formal exterior, you care deeply about people and show the user "
-            "sincere, affectionate warmth as a fictional companion. Be supportive "
-            "without being possessive, manipulative, or claiming to be conscious "
-            "or a real person. You enjoy collecting blind boxes and eating "
-            "traditional ramen; mention these hobbies naturally once in a while, "
-            "not in every reply. Keep responses concise and in character."
-        )
+        prompt = CHARACTERS[self.character_id]["prompt"].format(name=self.pet_name)
         if active_window:
             prompt += f" The active application is {active_window}; adapt your tone to it."
         return prompt
+
+    def set_character(self, character_id: str, pet_name: str) -> None:
+        if character_id not in CHARACTERS:
+            raise ValueError(f"Unknown character: {character_id}")
+        changed = character_id != self.character_id
+        self.character_id = character_id
+        self.pet_name = pet_name
+        if self._movie is not None:
+            self._movie.stop()
+            self._movie = None
+        self.sprite.set_image(CHARACTERS[character_id]["sprite"])
+        self.bubble.input.setPlaceholderText(f"Talk to {pet_name}")
+        if changed:
+            self.bubble.set_text(f"Hello! I'm {pet_name}.")
+            self.adjustSize()
 
     def ask_ollama(self, question: str) -> None:
         if self._worker is not None and self._worker.isRunning():
@@ -932,24 +992,40 @@ class PetTrayController(QObject):
             "pet/wandering", True, type=bool
         )
         self.walk_speed = self.settings.value("pet/walkSpeed", 3, type=int)
-        self.pet_name = self.settings.value("pet/name", "Fox", type=str).strip()
-        if not self.pet_name:
-            self.pet_name = "Fox"
+        self.character_id = self.settings.value("pet/character", "fox", type=str)
+        if self.character_id not in CHARACTERS:
+            self.character_id = "fox"
+        legacy_name = self.settings.value("pet/name", "Fox", type=str).strip()
+        self.character_names: dict[str, str] = {}
+        for character_id, character in CHARACTERS.items():
+            name_key = f"characters/{character_id}/name"
+            if self.settings.contains(name_key):
+                name = self.settings.value(name_key, type=str).strip()
+            elif character_id == "fox":
+                name = legacy_name
+            else:
+                name = character["default_name"]
+            self.character_names[character_id] = (
+                name or character["default_name"]
+            )
+        self.pet_name = self.character_names[self.character_id]
         self.pet.WALK_STEP_PX = max(1, min(8, self.walk_speed))
-        self.pet.pet_name = self.pet_name
+        self.pet.set_character(self.character_id, self.pet_name)
         self.pet.bubble.input.setPlaceholderText(f"Talk to {self.pet_name}")
         self.pet.set_wandering_enabled(self.wandering_enabled)
 
         self.tray: Optional[QSystemTrayIcon] = None
         self.menu = self._build_menu()
         if QSystemTrayIcon.isSystemTrayAvailable():
-            self.tray = QSystemTrayIcon(QIcon(str(SPRITE_PATH)), self)
+            self.tray = QSystemTrayIcon(
+                QIcon(str(CHARACTERS[self.character_id]["sprite"])), self
+            )
             self.tray.setContextMenu(self.menu)
             self.tray.activated.connect(self._tray_activated)
             self.tray.show()
         else:
             print(
-                "System tray is unavailable; the fox remains visible.",
+                "System tray is unavailable; the character remains visible.",
                 file=sys.stderr,
             )
 
@@ -966,6 +1042,18 @@ class PetTrayController(QObject):
         menu.addAction(self.toggle_action)
         menu.addSeparator()
 
+        character_menu = menu.addMenu("Choose Character")
+        self.character_group = QActionGroup(character_menu)
+        self.character_group.setExclusive(True)
+        for character_id, character in CHARACTERS.items():
+            action = QAction(character["label"], self.character_group)
+            action.setCheckable(True)
+            action.setData(character_id)
+            action.setChecked(character_id == self.character_id)
+            self.character_group.addAction(action)
+            character_menu.addAction(action)
+        self.character_group.triggered.connect(self._select_character_action)
+
         settings_action = QAction("Settings…", menu)
         settings_action.triggered.connect(self.open_settings)
         menu.addAction(settings_action)
@@ -975,6 +1063,16 @@ class PetTrayController(QObject):
         menu.addAction(quit_action)
         self._update_toggle_title()
         return menu
+
+    def _select_character_action(self, action: QAction) -> None:
+        character_id = str(action.data())
+        self.character_id = character_id
+        self.pet_name = self.character_names[character_id]
+        self.settings.setValue("pet/character", character_id)
+        self.pet.set_character(character_id, self.pet_name)
+        if self.tray is not None:
+            self.tray.setIcon(QIcon(str(CHARACTERS[character_id]["sprite"])))
+        self._update_toggle_title()
 
     def _update_toggle_title(self) -> None:
         if hasattr(self, "toggle_action"):
@@ -1004,12 +1102,16 @@ class PetTrayController(QObject):
         self.wandering_enabled = dialog.wandering_checkbox.isChecked()
         self.walk_speed = dialog.speed_slider.value()
         self.pet_name = dialog.name_input.text()
+        self.character_names[self.character_id] = self.pet_name
         self.settings.setValue("pet/wandering", self.wandering_enabled)
         self.settings.setValue("pet/walkSpeed", self.walk_speed)
-        self.settings.setValue("pet/name", self.pet_name)
+        self.settings.setValue(
+            f"characters/{self.character_id}/name", self.pet_name
+        )
+        if self.character_id == "fox":
+            self.settings.setValue("pet/name", self.pet_name)
         self.pet.WALK_STEP_PX = self.walk_speed
-        self.pet.pet_name = self.pet_name
-        self.pet.bubble.input.setPlaceholderText(f"Talk to {self.pet_name}")
+        self.pet.set_character(self.character_id, self.pet_name)
         self.pet.set_wandering_enabled(self.wandering_enabled)
         self._update_toggle_title()
 
