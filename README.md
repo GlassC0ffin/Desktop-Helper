@@ -4,7 +4,7 @@ A small macOS menu-bar app with a wandering desktop companion and a local
 Ollama-powered chat bubble. The app can be hidden or shown from the menu-bar
 icon, and its name and walking behavior can be changed in Settings.
 
-> **Prebuilt download:** [Download DesktopFox for Apple silicon](downloads/DesktopFox-macOS.zip).
+> **Prebuilt download:** [Download the latest DesktopFox release for Apple silicon](https://github.com/GlassC0ffin/Desktop-Helper/releases/latest).
 > This app is not signed or notarized; see the first-launch notes below.
 
 ## Requirements
@@ -99,7 +99,7 @@ from Finder without keeping a Terminal window open.
 - `assets/chibi_fox.png` — companion artwork used by the app and its icon.
 - `build_macos.sh` — macOS app and ZIP build script.
 - `requirements-desktop.txt` — Python dependencies for running and packaging.
-- `downloads/DesktopFox-macOS.zip` — prebuilt app for Apple silicon Macs.
+- GitHub Releases — prebuilt app downloads for Apple silicon Macs.
 
 The repository also contains a small, independent browser canvas demo. To run
 it, open `index.html` in a browser. If ES module imports are blocked over
