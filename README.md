@@ -82,6 +82,8 @@ and open it.
 - If setup fails, check your internet connection and available disk space.
   The Ollama server log is at
   `~/Library/Application Support/DesktopFox/ollama.log`.
+- If the model download reports an SSL certificate error, install the latest
+  app update and retry on a network that permits HTTPS access to GitHub.
 - Choose **Quit Desktop Pet** from the menu-bar menu to exit.
 
 Each character has a distinct AI personality prompt in `desktop_pet.py`.

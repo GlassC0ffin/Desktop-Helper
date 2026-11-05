@@ -16,6 +16,7 @@ import random
 import shutil
 import signal
 import socket
+import ssl
 import subprocess
 import sys
 import tarfile
@@ -25,6 +26,7 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
+import certifi
 import ollama
 from PySide6.QtCore import (
     QObject,
@@ -424,7 +426,10 @@ class BundledOllamaRuntime:
                 MODEL_ARCHIVE_URL,
                 headers={"User-Agent": "DesktopFox/1.1.0"},
             )
-            with urllib.request.urlopen(request, timeout=60) as response:
+            tls_context = ssl.create_default_context(cafile=certifi.where())
+            with urllib.request.urlopen(
+                request, timeout=60, context=tls_context
+            ) as response:
                 total_bytes = int(response.headers.get("Content-Length", "0"))
                 required = total_bytes + MODEL_BLOB_SIZE + 256 * 1024 * 1024
                 free_bytes = shutil.disk_usage(self.support_dir).free
