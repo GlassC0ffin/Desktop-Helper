@@ -72,8 +72,8 @@ and open it.
 ## Use the pet
 
 - Click the character's menu-bar icon to turn the pet on or off.
-- Use **Choose Character** in the menu-bar menu to switch between Fox,
-  Guardian, and Maid. Each has its own artwork, personality, and saved name.
+- Use **Choose Character** in the menu-bar menu to switch between Fox, Jane,
+  and Ellen. Each has its own artwork, affectionate personality, and saved name.
 - Choose **Settings…** to change its name, wandering behavior, and walking
   speed.
 - Type in the speech bubble and press Return or the send button to chat.
@@ -84,8 +84,8 @@ and open it.
   `~/Library/Application Support/DesktopFox/ollama.log`.
 - Choose **Quit Desktop Pet** from the menu-bar menu to exit.
 
-The AI personality prompt is in `DesktopPet.build_system_prompt()` in
-`desktop_pet.py`. Preferences such as the pet's name persist across launches.
+Each character has a distinct AI personality prompt in `desktop_pet.py`.
+Preferences such as each character's name persist across launches.
 
 ## Model and third-party licenses
 
