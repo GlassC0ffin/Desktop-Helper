@@ -1,10 +1,10 @@
-# Desktop Fox
+# Desktop Pets
 
-A macOS menu-bar app with a wandering desktop companion and local AI chat.
+A macOS menu-bar app with wandering desktop companions and local AI chat.
 The app bundles the Ollama runtime and automatically downloads the llama3.2
 model the first time you send a chat message.
 
-> **Download:** [Get the latest Desktop Fox release for Apple silicon](https://github.com/GlassC0ffin/Desktop-Helper/releases/latest).
+> **Download:** [Get the latest Desktop Pets release for Apple silicon](https://github.com/GlassC0ffin/Desktop-Helper/releases/latest).
 > The model is a separate release asset and downloads automatically on first
 > chat. This app is not signed or notarized; see the security notes below.
 
@@ -20,11 +20,14 @@ model the first time you send a chat message.
 
 ## Install the prebuilt app
 
-1. Open the [latest Desktop Fox release](https://github.com/GlassC0ffin/Desktop-Helper/releases/latest)
-   and download `DesktopFox-macOS.zip`.
-2. Unzip it, move `DesktopFox.app` into Applications if desired, and open the
+1. Open the [latest Desktop Pets release](https://github.com/GlassC0ffin/Desktop-Helper/releases/latest)
+   and download `DesktopPets-macOS.zip`.
+2. Unzip it, move `DesktopPets.app` into Applications if desired, and open the
    app from Finder.
-3. Type a message in the speech bubble. The first chat attempts to download
+3. Click the pet to open its chat bubble, type a message, and press Return or
+   click the send button. Double-click the pet to close the bubble. Use the
+   moon button in the bubble to put the pet to sleep; click the sleeping pet
+   to wake it. The first chat attempts to download
    the approximately 1.9 GB llama3.2 model automatically. Keep the app open
    and connected to the internet until setup finishes. Later chats use the
    local model.
@@ -35,7 +38,7 @@ the repository is private):
 1. While signed in to GitHub with an account that can access this repository,
    open the [v1.1.0 model release](https://github.com/GlassC0ffin/Desktop-Helper/releases/tag/v1.1.0)
    and download `DesktopFox-llama3.2-model.tar` (not the source-code archive).
-2. In Desktop Fox, open the menu-bar menu and choose **Install AI Model from
+2. In Desktop Pets, open the menu-bar menu and choose **Install AI Model from
    File…**, then select the downloaded `.tar`.
 
 The app verifies the archive's SHA-256 before safely installing it. It does
@@ -43,8 +46,9 @@ not need or store your GitHub password or access token.
 
 The app bundles Ollama and starts its local server automatically when chat is
 used. The model and server log are stored in
-`~/Library/Application Support/DesktopHelper/DesktopFox` and reused between
-launches.
+the existing `~/Library/Application Support/DesktopHelper/DesktopFox` support
+folder and reused between launches, so upgrading does not require downloading
+the model again.
 
 ## Build from source
 
@@ -66,7 +70,7 @@ launches.
 
 The scripts create an isolated `.venv-build` and produce:
 
-- `dist/DesktopFox.app` and `dist/DesktopFox-macOS.zip`
+- `dist/DesktopPets.app` and `dist/DesktopPets-macOS.zip`
 - `dist/DesktopFox-llama3.2-model.tar`, to upload as a separate GitHub Release
   asset named exactly `DesktopFox-llama3.2-model.tar`
 
@@ -85,11 +89,14 @@ and open it.
 ## Use the pet
 
 - Click the character's menu-bar icon to turn the pet on or off.
-- Use **Choose Character** in the menu-bar menu to switch between Fox, Jane,
+- Use **Choose Character** in the menu-bar menu to switch between Miyabi, Jane,
   and Ellen. Each has its own artwork, affectionate personality, and saved name.
 - Choose **Settings…** to change its name, wandering behavior, and walking
   speed.
-- Type in the speech bubble and press Return or the send button to chat.
+- Click the pet to open the chat bubble, then type a message and press Return
+  or the send button to chat. Double-click the pet to close the bubble.
+- Click the moon button in the bubble to put the pet to sleep. Click the
+  sleeping pet to wake it.
 - The first chat downloads and installs the local model. A progress message
   appears in the bubble.
 - For a private repository, download `DesktopFox-llama3.2-model.tar` from the
@@ -100,7 +107,7 @@ and open it.
   `~/Library/Application Support/DesktopFox/ollama.log`.
 - If the model download reports an SSL certificate error, install the latest
   app update and retry on a network that permits HTTPS access to GitHub.
-- Choose **Quit Desktop Pet** from the menu-bar menu to exit.
+- Choose **Quit Desktop Pets** from the menu-bar menu to exit.
 
 Each character has a distinct AI personality prompt in `desktop_pet.py`.
 Preferences such as each character's name persist across launches.
@@ -125,7 +132,7 @@ python3 desktop_pet.py
 ## Project files
 
 - `desktop_pet.py` — PySide6 app, menu-bar controls, movement, and Ollama chat.
-- `assets/` — fox, guardian, and maid character artwork.
+- `assets/` — Miyabi, Jane, and Ellen character artwork.
 - `build_macos.sh` — app bundle and app ZIP build script.
 - `prepare_model_archive.sh` — prepares the separately published model asset.
 - `licenses/` — third-party license terms and required notices.

@@ -45,6 +45,7 @@ from PySide6.QtGui import (
     QColor,
     QFont,
     QIcon,
+    QLinearGradient,
     QMovie,
     QPainter,
     QPainterPath,
@@ -82,9 +83,10 @@ MODEL_ARCHIVE_SHA256 = "e53ee97170e98c11bbe5da658ca261587f895867443c2a2476e72386
 MODEL_BLOB_SIZE = 2019377376
 SPRITE_PATH = Path(__file__).resolve().parent / "assets" / "chibi_fox.png"
 CHARACTERS = {
-    "fox": {
-        "label": "Fox",
-        "default_name": "Fox",
+    "miyabi": {
+        "label": "Miyabi",
+        "default_name": "Miyabi",
+        "previous_default_name": "Fox",
         "sprite": SPRITE_PATH,
         "prompt": (
             "You are {name}, the user's fictional fox-spirit girlfriend and "
@@ -136,9 +138,10 @@ CHARACTERS = {
 
 
 class SpeechBubble(QWidget):
-    """Assistant response and Siri-like text input in one floating bubble."""
+    """Assistant response and text input in a glossy floating bubble."""
 
     submitted = Signal(str)
+    sleep_requested = Signal()
 
     def __init__(self, text: str, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -153,32 +156,54 @@ class SpeechBubble(QWidget):
         self.label.setMaximumWidth(360)
 
         self.input = QLineEdit(self)
-        self.input.setPlaceholderText("Type to your fox")
+        self.input.setPlaceholderText("Type a message…")
         self.input.setClearButtonEnabled(True)
         self.input.setStyleSheet(
             "QLineEdit {"
             " color: #f8f4ff;"
-            " background: transparent;"
-            " border: none;"
+            " background: rgba(255, 255, 255, 22);"
+            " border: 1px solid rgba(255, 255, 255, 58);"
+            " border-radius: 14px;"
             " padding: 5px 8px;"
             " font-size: 15px;"
             " selection-background-color: #9c78e8;"
             "}"
+            "QLineEdit:focus { border-color: rgba(255, 255, 255, 145); }"
+        )
+        self.sleep_button = QPushButton("☾", self)
+        self.sleep_button.setAccessibleName("Put pet to sleep")
+        self.sleep_button.setToolTip("Put pet to sleep")
+        self.sleep_button.setFixedSize(28, 28)
+        self.sleep_button.setStyleSheet(
+            "QPushButton {"
+            " color: #f8f4ff;"
+            " background: rgba(255, 255, 255, 30);"
+            " border: 1px solid rgba(255, 255, 255, 80);"
+            " border-radius: 14px;"
+            " font-size: 17px;"
+            "}"
+            "QPushButton:hover { background: rgba(255, 255, 255, 68); }"
         )
         self.send_button = QPushButton("↑", self)
-        self.send_button.setAccessibleName("Send message to fox")
+        self.send_button.setAccessibleName("Send message")
         self.send_button.setFixedSize(30, 30)
         self.send_button.setStyleSheet(
             "QPushButton {"
             " color: white;"
-            " background: #7657c8;"
-            " border: none;"
+            " background: rgba(133, 104, 207, 220);"
+            " border: 1px solid rgba(255, 255, 255, 110);"
             " border-radius: 15px;"
             " font-size: 18px;"
             " font-weight: bold;"
             "}"
-            "QPushButton:hover { background: #9273e3; }"
+            "QPushButton:hover { background: rgba(164, 137, 232, 245); }"
         )
+
+        header = QHBoxLayout()
+        header.setContentsMargins(2, 0, 0, 0)
+        header.setSpacing(8)
+        header.addWidget(self.label, 1)
+        header.addWidget(self.sleep_button, 0, Qt.AlignmentFlag.AlignTop)
 
         input_row = QHBoxLayout()
         input_row.setContentsMargins(8, 3, 5, 3)
@@ -190,7 +215,7 @@ class SpeechBubble(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 11, 16, 20)
         layout.setSpacing(8)
-        layout.addWidget(self.label)
+        layout.addLayout(header)
         layout.addLayout(input_row)
         self.attribution = QLabel("Built with Llama", self)
         self.attribution.setStyleSheet(
@@ -202,6 +227,7 @@ class SpeechBubble(QWidget):
 
         self.input.returnPressed.connect(self.submit)
         self.send_button.clicked.connect(self.submit)
+        self.sleep_button.clicked.connect(self.sleep_requested)
 
     def submit(self) -> None:
         question = self.input.text().strip()
@@ -232,9 +258,15 @@ class SpeechBubble(QWidget):
             )
         )
         path = path.united(tail)
-        painter.setBrush(QColor("#211b39"))
-        painter.setPen(QPen(QColor("#8d71d1"), 1.5))
+        gradient = QLinearGradient(0, 0, 0, body_height)
+        gradient.setColorAt(0, QColor(92, 75, 132, 218))
+        gradient.setColorAt(0.45, QColor(41, 35, 63, 205))
+        gradient.setColorAt(1, QColor(23, 21, 38, 225))
+        painter.setBrush(gradient)
+        painter.setPen(QPen(QColor(255, 255, 255, 155), 1.2))
         painter.drawPath(path)
+        painter.setPen(QPen(QColor(255, 255, 255, 34), 1))
+        painter.drawLine(18, 8, self.width() - 18, 8)
 
 
 class PetSprite(QWidget):
@@ -387,7 +419,7 @@ class BundledOllamaRuntime:
                 return runtime_dir, executable
 
         raise FileNotFoundError(
-            "The bundled Ollama runtime is missing. Reinstall Desktop Fox. "
+            "The bundled Ollama runtime is missing. Reinstall Desktop Pets. "
             "When running from source, install Ollama for macOS first."
         )
 
@@ -439,7 +471,7 @@ class BundledOllamaRuntime:
 
             if verified_sha256 != MODEL_ARCHIVE_SHA256:
                 raise ValueError(
-                    "This is not the expected Desktop Fox llama3.2 model archive, "
+                    "This is not the expected Desktop Pets llama3.2 model archive, "
                     "or the download is incomplete. Download "
                     "DesktopFox-llama3.2-model.tar from the v1.1.0 release and "
                     "select that file."
@@ -725,7 +757,7 @@ class PetSettingsDialog(QDialog):
         self,
         wandering_enabled: bool,
         walk_speed: int,
-        pet_name: str = "Fox",
+        pet_name: str = "Miyabi",
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
@@ -792,6 +824,9 @@ class DesktopPet(QWidget):
         self.model = model
         self.runtime = runtime or BundledOllamaRuntime()
         self._drag_offset: Optional[QPoint] = None
+        self._dragged = False
+        self._ignore_next_release = False
+        self._sleeping = False
         self._worker: Optional[OllamaWorker] = None
         self._model_install_worker: Optional[ModelArchiveWorker] = None
         self._movie: Optional[QMovie] = None
@@ -809,11 +844,13 @@ class DesktopPet(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
 
-        self.bubble = SpeechBubble("Ask me anything.", self)
+        self.pet_name = "Miyabi"
+        self.character_id = "miyabi"
+        self.bubble = SpeechBubble(f"Hi, I'm {self.pet_name}.", self)
         self.bubble.submitted.connect(self.ask_ollama)
+        self.bubble.sleep_requested.connect(self.put_to_sleep)
         self.sprite = PetSprite(self)
-        self.pet_name = "Fox"
-        self.character_id = "fox"
+        self.bubble.hide()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 2)
@@ -832,6 +869,11 @@ class DesktopPet(QWidget):
         self.activity_timer.timeout.connect(self._change_activity)
         self._start_walking()
 
+        self._click_timer = QTimer(self)
+        self._click_timer.setSingleShot(True)
+        self._click_timer.setInterval(QApplication.doubleClickInterval())
+        self._click_timer.timeout.connect(self.open_chat)
+
         self.configure_macos_overlay()
 
     def mousePressEvent(self, event) -> None:  # noqa: N802 - Qt event method
@@ -839,12 +881,18 @@ class DesktopPet(QWidget):
             self._drag_offset = (
                 event.globalPosition().toPoint() - self.frameGeometry().topLeft()
             )
+            self._dragged = False
             event.accept()
             return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802 - Qt event method
         if self._drag_offset is not None and event.buttons() & Qt.MouseButton.LeftButton:
+            if (
+                event.globalPosition().toPoint() - self._drag_offset
+                - self.frameGeometry().topLeft()
+            ).manhattanLength() > QApplication.startDragDistance():
+                self._dragged = True
             self.move(event.globalPosition().toPoint() - self._drag_offset)
             event.accept()
             return
@@ -853,16 +901,68 @@ class DesktopPet(QWidget):
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt event method
         if event.button() == Qt.MouseButton.LeftButton:
             self._drag_offset = None
+            if self._ignore_next_release:
+                self._ignore_next_release = False
+                event.accept()
+                return
+            clicked_sprite = self.sprite.geometry().contains(
+                event.position().toPoint()
+            )
+            if clicked_sprite and not self._dragged:
+                self._click_timer.start()
+            self._dragged = False
             event.accept()
             return
         super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802 - Qt event method
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.bubble.input.setFocus(Qt.FocusReason.MouseFocusReason)
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and self.sprite.geometry().contains(event.position().toPoint())
+        ):
+            self._click_timer.stop()
+            self._ignore_next_release = True
+            QTimer.singleShot(0, self._clear_release_guard)
+            self.close_chat()
             event.accept()
             return
         super().mouseDoubleClickEvent(event)
+
+    def _clear_release_guard(self) -> None:
+        self._ignore_next_release = False
+
+    def open_chat(self) -> None:
+        if self._sleeping:
+            self.wake_up()
+        self.bubble.show()
+        self.adjustSize()
+        self.raise_()
+        self.bubble.input.setFocus(Qt.FocusReason.MouseFocusReason)
+
+    def close_chat(self) -> None:
+        self.bubble.hide()
+        self.adjustSize()
+
+    def put_to_sleep(self) -> None:
+        self._sleeping = True
+        self.walk_timer.stop()
+        self.activity_timer.stop()
+        self._velocity_x = 0
+        self._velocity_y = 0
+        self._activity = "sleeping"
+        self.sprite.set_activity(self._activity)
+        self.close_chat()
+
+    def wake_up(self) -> None:
+        if not self._sleeping:
+            return
+        self._sleeping = False
+        if self._pet_enabled and self._wandering_enabled:
+            self.walk_timer.start()
+            self._start_walking()
+        else:
+            self._activity = "resting"
+            self.sprite.set_activity(self._activity)
 
     def walk_step(self) -> None:
         if (
@@ -919,6 +1019,11 @@ class DesktopPet(QWidget):
 
     def set_wandering_enabled(self, enabled: bool) -> None:
         self._wandering_enabled = enabled
+        if self._sleeping:
+            self.walk_timer.stop()
+            self.activity_timer.stop()
+            self.sprite.set_activity("sleeping")
+            return
         if enabled and self._pet_enabled:
             self.walk_timer.start()
             self._start_walking()
@@ -934,6 +1039,11 @@ class DesktopPet(QWidget):
         self._pet_enabled = enabled
         if enabled:
             self.show()
+            if self._sleeping:
+                self.walk_timer.stop()
+                self.activity_timer.stop()
+                self.sprite.set_activity("sleeping")
+                return
             if self._wandering_enabled:
                 self.walk_timer.start()
                 self._start_walking()
@@ -1019,6 +1129,7 @@ class DesktopPet(QWidget):
             self.show_response("The local AI model is already being installed.")
             return
 
+        self.open_chat()
         self.show_response("Verifying the selected model archive…")
         worker = ModelArchiveWorker(
             runtime=self.runtime,
@@ -1047,6 +1158,7 @@ class DesktopPet(QWidget):
                 "Install pyobjc-framework-Cocoa to keep your current app active."
             )
             print(f"{message} ({exc})", file=sys.stderr)
+            self.open_chat()
             self.show_response(message)
             return
 
@@ -1080,6 +1192,7 @@ class DesktopPet(QWidget):
         """Switch the emoji to an animated GIF/sprite when one is available."""
         movie = QMovie(path)
         if not movie.isValid():
+            self.open_chat()
             self.show_response(f"Couldn't load sprite: {path}")
             return False
 
@@ -1105,25 +1218,42 @@ class PetTrayController(QObject):
             "pet/wandering", True, type=bool
         )
         self.walk_speed = self.settings.value("pet/walkSpeed", 3, type=int)
-        self.character_id = self.settings.value("pet/character", "fox", type=str)
+        self.character_id = self.settings.value("pet/character", "miyabi", type=str)
+        if self.character_id == "fox":
+            self.character_id = "miyabi"
+            self.settings.setValue("pet/character", self.character_id)
         if self.character_id not in CHARACTERS:
-            self.character_id = "fox"
-        legacy_name = self.settings.value("pet/name", "Fox", type=str).strip()
+            self.character_id = "miyabi"
+        legacy_name = self.settings.value("pet/name", "Miyabi", type=str).strip()
         self.character_names: dict[str, str] = {}
         for character_id, character in CHARACTERS.items():
             name_key = f"characters/{character_id}/name"
+            old_name_key = "characters/fox/name" if character_id == "miyabi" else ""
             if self.settings.contains(name_key):
                 name = self.settings.value(name_key, type=str).strip()
                 if name == character.get("previous_default_name"):
                     name = character["default_name"]
                     self.settings.setValue(name_key, name)
-            elif character_id == "fox":
-                name = legacy_name
+            elif old_name_key and self.settings.contains(old_name_key):
+                name = self.settings.value(old_name_key, type=str).strip()
+                if name == character.get("previous_default_name"):
+                    name = character["default_name"]
+                self.settings.setValue(name_key, name)
+            elif character_id == "miyabi":
+                name = (
+                    character["default_name"]
+                    if legacy_name == "Fox"
+                    else legacy_name
+                )
             else:
                 name = character["default_name"]
             self.character_names[character_id] = (
                 name or character["default_name"]
             )
+            if character_id == "miyabi" and not self.settings.contains(name_key):
+                self.settings.setValue(name_key, self.character_names[character_id])
+        if legacy_name == "Fox":
+            self.settings.setValue("pet/name", "Miyabi")
         self.pet_name = self.character_names[self.character_id]
         self.pet.WALK_STEP_PX = max(1, min(8, self.walk_speed))
         self.pet.set_character(self.character_id, self.pet_name)
@@ -1178,7 +1308,7 @@ class PetTrayController(QObject):
         settings_action.triggered.connect(self.open_settings)
         menu.addAction(settings_action)
 
-        quit_action = QAction("Quit Desktop Pet", menu)
+        quit_action = QAction("Quit Desktop Pets", menu)
         quit_action.triggered.connect(self.app.quit)
         menu.addAction(quit_action)
         self._update_toggle_title()
@@ -1189,7 +1319,7 @@ class PetTrayController(QObject):
             self.pet,
             "Choose DesktopFox-llama3.2-model.tar downloaded from GitHub",
             str(Path.home() / "Downloads"),
-            "Desktop Fox model archive (DesktopFox-llama3.2-model.tar);;Tar archives (*.tar)",
+            "Desktop Pets model archive (DesktopFox-llama3.2-model.tar);;Tar archives (*.tar)",
         )
         if archive_path:
             self.pet.install_model_archive(Path(archive_path))
@@ -1238,7 +1368,7 @@ class PetTrayController(QObject):
         self.settings.setValue(
             f"characters/{self.character_id}/name", self.pet_name
         )
-        if self.character_id == "fox":
+        if self.character_id == "miyabi":
             self.settings.setValue("pet/name", self.pet_name)
         self.pet.WALK_STEP_PX = self.walk_speed
         self.pet.set_character(self.character_id, self.pet_name)
@@ -1253,7 +1383,9 @@ class PetTrayController(QObject):
 def main() -> int:
     app = QApplication(sys.argv)
     app.setOrganizationName("DesktopHelper")
+    # Keep the existing settings and model directory across the product rename.
     app.setApplicationName("DesktopFox")
+    app.setApplicationDisplayName("Desktop Pets")
     app.setQuitOnLastWindowClosed(False)
 
     runtime = BundledOllamaRuntime()

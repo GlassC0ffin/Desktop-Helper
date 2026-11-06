@@ -11,12 +11,12 @@ fi
 
 PYTHON=${PYTHON:-python3}
 VENV_DIR="$PROJECT_DIR/.venv-build"
-ICONSET_DIR="$PROJECT_DIR/build/macos/DesktopFox.iconset"
-ICON_PATH="$PROJECT_DIR/build/macos/DesktopFox.icns"
+ICONSET_DIR="$PROJECT_DIR/build/macos/DesktopPets.iconset"
+ICON_PATH="$PROJECT_DIR/build/macos/DesktopPets.icns"
 OLLAMA_RESOURCES=${OLLAMA_RESOURCES:-/Applications/Ollama.app/Contents/Resources}
 
 if [ ! -x "$OLLAMA_RESOURCES/ollama" ]; then
-    echo "Install the official Ollama macOS app before building Desktop Fox." >&2
+    echo "Install the official Ollama macOS app before building Desktop Pets." >&2
     echo "Expected Ollama runtime at: $OLLAMA_RESOURCES/ollama" >&2
     exit 1
 fi
@@ -57,9 +57,9 @@ iconutil -c icns "$ICONSET_DIR" -o "$ICON_PATH"
     --clean \
     --windowed \
     --onedir \
-    --name DesktopFox \
+    --name DesktopPets \
     --icon "$ICON_PATH" \
-    --osx-bundle-identifier com.desktophelper.desktopfox \
+    --osx-bundle-identifier com.desktophelper.desktoppets \
     --add-data "$PROJECT_DIR/assets:assets" \
     --add-data "$OLLAMA_RESOURCES:ollama_runtime" \
     --add-data "$PROJECT_DIR/licenses:licenses" \
@@ -68,9 +68,8 @@ iconutil -c icns "$ICONSET_DIR" -o "$ICON_PATH"
     --distpath "$PROJECT_DIR/dist" \
     desktop_pet.py
 
-chmod +x "$PROJECT_DIR/dist/DesktopFox.app/Contents/Resources/ollama_runtime/ollama"
 "$VENV_DIR/bin/python" - "$OLLAMA_RESOURCES" \
-    "$PROJECT_DIR/dist/DesktopFox.app/Contents/Resources/ollama_runtime" <<'PY'
+    "$PROJECT_DIR/dist/DesktopPets.app/Contents/Resources/ollama_runtime" <<'PY'
 import os
 import sys
 
@@ -84,9 +83,10 @@ for current, _, filenames in os.walk(source_root):
             os.chmod(bundled, os.stat(bundled).st_mode | 0o111)
 PY
 
+chmod +x "$PROJECT_DIR/dist/DesktopPets.app/Contents/Resources/ollama_runtime/ollama"
 ditto -c -k --sequesterRsrc --keepParent \
-    "$PROJECT_DIR/dist/DesktopFox.app" \
-    "$PROJECT_DIR/dist/DesktopFox-macOS.zip"
+    "$PROJECT_DIR/dist/DesktopPets.app" \
+    "$PROJECT_DIR/dist/DesktopPets-macOS.zip"
 
-echo "App built: $PROJECT_DIR/dist/DesktopFox.app"
-echo "Shareable archive: $PROJECT_DIR/dist/DesktopFox-macOS.zip"
+echo "App built: $PROJECT_DIR/dist/DesktopPets.app"
+echo "Shareable archive: $PROJECT_DIR/dist/DesktopPets-macOS.zip"
